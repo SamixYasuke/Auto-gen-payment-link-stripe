@@ -10,11 +10,11 @@ dotenv.config();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const swaggerOptions = {
   swaggerDefinition: {
-    openapi: '3.0.0',
+    openapi: '3.1.0',
     info: {
-      title: 'My API',
+      title: 'Stripe Payment Link Gen',
       version: '1.0.0',
-      description: 'API documentation for my Express app',
+      description: 'API documentation Nathy API Link Generation',
     },
     servers: [
       {
