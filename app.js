@@ -19,6 +19,9 @@ const swaggerOptions = {
       {
         url: 'http://localhost:3000',
       },
+      {
+        url: 'https://auto-gen-payment-link-stripe.vercel.app/',
+      },
     ],
   },
   apis: ['./*.js'], // Adjusted path to include all JS files in the current directory
