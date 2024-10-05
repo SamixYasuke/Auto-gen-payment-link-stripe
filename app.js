@@ -21,7 +21,7 @@ const swaggerOptions = {
         url: 'http://localhost:3000',
       },
       {
-        url: 'https://auto-gen-payment-link-stripe.vercel.app/',
+        url: 'https://auto-gen-payment-link-stripe.vercel.app',
       },
     ],
   },
