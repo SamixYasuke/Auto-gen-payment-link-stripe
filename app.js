@@ -33,13 +33,33 @@ const createPaymentLinkSchema = z.object({
 
 app.post('/api/v1/create-payment-link', async (req, res) => {
   try {
-    const { productName, unitAmount, currency, quantity } = createPaymentLinkSchema.parse(req.body);
-    const product = await stripe.products.create({ name: productName });
+    const { 
+      productName, 
+      productDescription, 
+      unitAmount, 
+      currency, 
+      quantity, 
+    } = createPaymentLinkSchema.parse(req.body);
+
+    const TAX_RATE_ID = "txr_1Q7wZsEM4mSGBUuft8u7hk6Q";
+    
+    const product = await stripe.products.create({
+      name: productName,
+      description: productDescription,
+    });
+    
     const price = await stripe.prices.create({
       unit_amount: unitAmount,
       currency: currency,
       product: product.id,
+      tax_behavior: 'exclusive',
     });
+
+    // const taxRate = await stripe.taxRates.create({
+    //   display_name: 'General Tax',
+    //   percentage: 20.0,
+    //   inclusive: false,
+    // });
 
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [
@@ -49,8 +69,7 @@ app.post('/api/v1/create-payment-link', async (req, res) => {
         },
       ],
     });
-
-    res.status(201).json({ paymentLinkId: paymentLink.id, url: paymentLink.url });
+    res.status(201).json({ paymentLinkId: paymentLink.id, url: paymentLink.url});
   } catch (error) {
     if (error instanceof z.ZodError) {
       const formattedErrors = error.errors.map((err) => ({
