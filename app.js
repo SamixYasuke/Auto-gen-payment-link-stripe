@@ -61,6 +61,8 @@ app.post('/api/v1/create-payment-link', async (req, res) => {
           quantity: quantity,
         },
       ],
+      automatic_tax: { enabled: true },
+      phone_number_collection: { enabled: true },
     });
     res.status(201).json({ paymentLinkId: paymentLink.id, url: paymentLink.url});
   } catch (error) {
