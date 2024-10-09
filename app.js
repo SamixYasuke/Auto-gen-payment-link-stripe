@@ -1,178 +1,72 @@
 import express from 'express';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
-import swaggerJSDoc from 'swagger-jsdoc';
-import swaggerUi from 'swagger-ui-express';
+import cors from 'cors';
+import { z } from 'zod';
 
 dotenv.config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const swaggerOptions = {
-  swaggerDefinition: {
-    openapi: '3.1.0',
-    info: {
-      title: 'Stripe Payment Link Gen',
-      version: '1.0.0',
-      description: 'API documentation Nathy API Link Generation',
-    },
-    servers: [
-      {
-        url: 'http://localhost:3000',
-      },
-      {
-        url: 'https://auto-gen-payment-link-stripe.vercel.app',
-      },
-    ],
-  },
-  apis: ['./*.js'], // Adjusted path to include all JS files in the current directory
-};
-
-const swaggerDocs = swaggerJSDoc(swaggerOptions);
 
 const app = express();
 app.use(express.json());
-app.use('/doc', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+app.use(cors());
 
-/**
- * @swagger
- * /api/v1/create-payment-link:
- *   post:
- *     summary: Create a payment link
- *     description: Creates a payment link for a product.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               productName:
- *                 type: string
- *                 example: "Product Name"
- *               unitAmount:
- *                 type: integer
- *                 example: 1000
- *               currency:
- *                 type: string
- *                 example: "usd"
- *               quantity:
- *                 type: integer
- *                 example: 1
- *     responses:
- *       201:
- *         description: Payment link created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 paymentLinkId:
- *                   type: string
- *                   example: "link_1JyIuD2eZvKYlo2CzJ4M1n7G"
- *                 url:
- *                   type: string
- *                   example: "https://paymentlink.com"
- *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: "Error message"
- */
+const createPaymentLinkSchema = z.object({
+  productName: z.string().min(1, 'Product name is required'),
+  unitAmount: z.string().min(1, 'Unit amount is required').transform((val) => {
+    const num = Number(val);
+    if (isNaN(num) || num <= 0) {
+      throw new Error('Unit amount must be a positive number');
+    }
+    return num;
+  }),
+  currency: z.string().min(1, 'Currency is required'),
+  quantity: z.string().optional().default('1').transform((val) => {
+    const num = Number(val);
+    if (isNaN(num) || num < 1) {
+      throw new Error('Quantity must be at least 1');
+    }
+    return num;
+  }),
+});
+
 app.post('/api/v1/create-payment-link', async (req, res) => {
   try {
-    const { productName, unitAmount, currency, quantity } = req.body;
-    const product = await stripe.products.create({
-      name: productName,
-    });
+    const { productName, unitAmount, currency, quantity } = createPaymentLinkSchema.parse(req.body);
+    const product = await stripe.products.create({ name: productName });
     const price = await stripe.prices.create({
       unit_amount: unitAmount,
       currency: currency,
       product: product.id,
     });
+
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [
         {
           price: price.id,
-          quantity: quantity || 1,
+          quantity: quantity,
         },
       ],
     });
 
     res.status(201).json({ paymentLinkId: paymentLink.id, url: paymentLink.url });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      const formattedErrors = error.errors.map((err) => ({
+        field: err.path.join('.'),
+        message: err.message,
+      }));
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors: formattedErrors,
+      });
+    }    
     console.error('Error creating payment link:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-/**
- * @swagger
- * /api/v1/successful-payments:
- *   get:
- *     summary: Retrieve successful payments
- *     description: Fetches a list of successful payments made through Stripe.
- *     responses:
- *       200:
- *         description: A list of successful payments
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 successfulPayments:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         example: "pi_3Q6fbZEM4mSGBUuf1t8CT5wX"
- *                       amount:
- *                         type: integer
- *                         example: 107700
- *                       currency:
- *                         type: string
- *                         example: "usd"
- *                       status:
- *                         type: string
- *                         example: "succeeded"
- *                       created:
- *                         type: string
- *                         format: date-time
- *                         example: "2024-10-05T21:33:37.000Z"
- *                       buyerEmail:
- *                         type: string
- *                         example: "buyer@example.com"
- *                       buyerName:
- *                         type: string
- *                         example: "John Doe"
- *                       itemsBought:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             productName:
- *                               type: string
- *                               example: "Product Name"
- *                             quantity:
- *                               type: integer
- *                               example: 1
- *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: "Error message"
- */
 app.get('/api/v1/successful-payments', async (req, res) => {
   try {
     const paymentIntents = await stripe.paymentIntents.list({
@@ -184,34 +78,54 @@ app.get('/api/v1/successful-payments', async (req, res) => {
       (intent) => intent.status === 'succeeded'
     );
 
-    const paymentStatuses = await Promise.all(successfulPayments.map(async (intent) => {
-      const charge = intent?.charges?.data?.[0];
-      const session = await stripe.checkout.sessions.list({
-        payment_intent: intent.id,
-      });
-      const sessionId = session?.data?.[0]?.id;
-      const sessionWithItems = await stripe.checkout.sessions.retrieve(sessionId, {
-        expand: ['line_items'],
-      });
+    const paymentStatuses = await Promise.all(
+      successfulPayments.map(async (intent) => {
+        const charge = intent?.charges?.data?.[0];
+        
+        const session = await stripe.checkout.sessions.list({
+          payment_intent: intent.id,
+        });
 
-      const itemDetails = sessionWithItems?.line_items?.data?.map((item) => ({
-        productName: item.description,
-        quantity: item.quantity,
-      })) || [];
+        if (!session || !session.data[0]) {
+          console.error('No session found for intent:', intent.id);
+          return null;
+        }
 
-      return {
-        id: intent.id,
-        amount: intent.amount,
-        currency: intent.currency,
-        status: intent.status,
-        created: new Date(intent.created * 1000).toISOString(),
-        buyerEmail: charge?.billing_details?.email || 'N/A',
-        buyerName: charge?.billing_details?.name || 'N/A',
-        itemsBought: itemDetails,
-      };
-    }));
+        const sessionId = session.data[0].id;
+        const sessionWithItems = await stripe.checkout.sessions.retrieve(sessionId, {
+          expand: ['line_items'],
+        });
 
-    res.status(200).json({ successfulPayments: paymentStatuses });
+        const buyerEmail = sessionWithItems.customer_details?.email || charge?.billing_details?.email || 'N/A';
+        const buyerName = sessionWithItems.customer_details?.name || charge?.billing_details?.name || 'N/A';  
+        const buyerPhone = sessionWithItems.customer_details?.phone || 'N/A';
+
+        const itemDetails = await Promise.all(
+          sessionWithItems?.line_items?.data?.map(async (item) => {
+            const product = await stripe.products.retrieve(item.price.product);
+            return {
+              productName: product.name,
+              quantity: item.quantity,
+              productDescription: product.description || 'No description available',
+            };
+          }) || []
+        );
+
+        return {
+          id: intent.id,
+          amount: intent.amount,
+          currency: intent.currency,
+          status: intent.status,
+          created: new Date(intent.created * 1000).toISOString(),
+          buyerEmail: buyerEmail,
+          buyerName: buyerName,
+          buyerPhone: buyerPhone,
+          itemsBought: itemDetails,
+        };
+      })
+    );
+
+    res.status(200).json({ successfulPayments: paymentStatuses.filter(Boolean) });
   } catch (error) {
     console.error('Error fetching successful payments:', error.message);
     res.status(500).json({ error: error.message });
