@@ -40,8 +40,6 @@ app.post('/api/v1/create-payment-link', async (req, res) => {
       currency, 
       quantity, 
     } = createPaymentLinkSchema.parse(req.body);
-
-    const TAX_RATE_ID = "txr_1Q7wZsEM4mSGBUuft8u7hk6Q";
     
     const product = await stripe.products.create({
       name: productName,
@@ -54,12 +52,6 @@ app.post('/api/v1/create-payment-link', async (req, res) => {
       product: product.id,
       tax_behavior: 'exclusive',
     });
-
-    // const taxRate = await stripe.taxRates.create({
-    //   display_name: 'General Tax',
-    //   percentage: 20.0,
-    //   inclusive: false,
-    // });
 
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [
