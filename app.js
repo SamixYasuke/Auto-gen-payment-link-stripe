@@ -14,6 +14,7 @@ app.use(cors());
 
 const createPaymentLinkSchema = z.object({
   productName: z.string().min(1, 'Product name is required'),
+  productDescription: z.string().optional(),
   unitAmount: z.string().min(1, 'Unit amount is required').transform((val) => {
     const num = Number(val);
     if (isNaN(num) || num <= 0) {
