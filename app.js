@@ -223,6 +223,36 @@ app.get('/api/v1/test/successful-payments', async (req, res) => {
   }
 });
 
+app.post('/api/v1/refund', async (req, res) => {
+  try {
+    const { paymentIntentId, amount } = req.body;
+    const refundData = {
+      payment_intent: paymentIntentId
+    };
+    if (amount) {
+      refundData.amount = amount;
+    }
+    const refund = await stripeLive.refunds.create(refundData);
+    return res.status(200).json({ success: true, refund });
+  } catch (error) {
+    console.error('Error processing refund:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/v1/refunds', async (req, res) => {
+  try {
+    const refunds = await stripeLive.refunds.list({
+      limit: 100,
+    });
+
+    res.status(200).json({ success: true, refunds });
+  } catch (error) {
+    console.error('Error retrieving refunds:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
